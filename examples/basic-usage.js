@@ -4,7 +4,7 @@ const { TextBlindWatermark } = require('../dist/index.cjs')
 console.log('=== Text Blind Watermark JS - 基本用法 ===\n')
 
 // 创建水印实例
-const watermark = new TextBlindWatermark({ password: 'my-secret-password' })
+const watermark = new TextBlindWatermark({ password: 'my-secret-password', encoding: 'base4' })
 
 // 原始文本
 const originalText = `
@@ -47,7 +47,10 @@ console.log('与原始文本匹配:', cleanText === originalText)
 
 // 使用错误密码测试
 console.log('\n=== 使用错误密码测试 ===')
-const wrongPasswordWatermark = new TextBlindWatermark({ password: 'wrong-password' })
+const wrongPasswordWatermark = new TextBlindWatermark({
+  password: 'wrong-password',
+  encoding: 'binary',
+})
 
 try {
   const wrongExtraction = wrongPasswordWatermark.extractAsString(textWithWatermark)

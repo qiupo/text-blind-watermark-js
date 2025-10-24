@@ -10,28 +10,48 @@
 
 // 用于隐写术的零宽度字符映射
 const ZERO_WIDTH_CHARS = {
-  '0': '\u200B', // 零宽度空格
-  '1': '\u200C', // 零宽度非连接符
-  '2': '\u200D', // 零宽度连接符
-  '3': '\u2060', // 单词连接符
-  '4': '\u2061', // 函数应用符
-  '5': '\u2062', // 不可见乘号
-  '6': '\u2063', // 不可见分隔符
-  '7': '\u2064', // 不可见加号
-  '8': '\uFEFF', // 零宽度不换行空格
-  '9': '\u180E', // 蒙古文元音分隔符
-  A: '\u061C', // 阿拉伯字母标记
-  B: '\u17B4', // 高棉语元音 Aq
-  C: '\u17B5', // 高棉语元音 Aa
-  D: '\u200E', // 从左到右标记
-  E: '\u200F', // 从右到左标记
-  F: '\u202A', // 从左到右嵌入
+  '0': '\u200B', // 零宽度空格 (ZWSP)
+  '1': '\u2060', // Word Joiner（移动端更安全）
+  '2': '\u2061', // Function Application
+  '3': '\u2062', // Invisible Times
+  '4': '\u2063', // Invisible Separator
+  '5': '\u2064', // Invisible Plus
+  '6': '\uFEFF', // 零宽度不换行空格 (ZWNBSP)
+  '7': '\u206A', // Inhibit Symmetric Swapping
+  '8': '\u206B', // Activate Symmetric Swapping
+  '9': '\u206C', // Inhibit Arabic Form Shaping
+  A: '\u206D', // Activate Arabic Form Shaping
+  B: '\u206E', // National Digit Shapes
+  C: '\u206F', // Nominal Digit Shapes
+  D: '\u200E', // 从左到右标记 (LRM)
+  E: '\u200F', // 从右到左标记 (RLM)
+  F: '\u061C', // 阿拉伯字母标记 (ALM)
 } as const
 
 // 新增：移动端安全的二进制字符集，仅使用两个兼容性最好的零宽字符
 const BINARY_ZERO_WIDTH_CHARS = {
   '0': '\u200B', // 0 -> ZWSP
-  '1': '\u200C', // 1 -> ZWNJ
+  '1': '\u2060', // 1 -> Word Joiner (移动端更安全)
+} as const
+
+// 新增：四进制（base4）移动端安全字符集，2bit/字符，体积比 binary 缩半
+const BASE4_ZERO_WIDTH_CHARS = {
+  '0': '\u200B', // 00 (ZWSP)
+  '1': '\u2060', // 01 (Word Joiner)
+  '2': '\u2062', // 10 (Invisible Times)
+  '3': '\u2063', // 11 (Invisible Separator)
+} as const
+
+// 新增：八进制（base8）移动端紧凑字符集，3bit/字符，体积比 base4 再缩 33%
+const BASE8_ZERO_WIDTH_CHARS = {
+  '0': '\u200B', // 000 (ZWSP)
+  '1': '\u2060', // 001 (Word Joiner)
+  '2': '\u2061', // 010 (Function Application)
+  '3': '\u2062', // 011 (Invisible Times)
+  '4': '\u2063', // 100 (Invisible Separator)
+  '5': '\u2064', // 101 (Invisible Plus)
+  '6': '\uFEFF', // 110 (Zero Width No-Break Space)
+  '7': '\u200E', // 111 (Left-to-Right Mark)
 } as const
 
 // 用于解码的反向映射
@@ -48,8 +68,8 @@ export interface WatermarkOptions {
   password?: string | Uint8Array
   /** 用于可重现水印放置的随机种子 */
   seed?: number
-  /** 编码方案：默认 'hex'，移动端安全可用 'binary' */
-  encoding?: 'hex' | 'binary'
+  /** 编码方案：默认 'hex'，移动端安全可用 'binary' 或 'base4'，更紧凑可选 'base8' */
+  encoding?: 'hex' | 'binary' | 'base4' | 'base8'
 }
 
 /**
@@ -212,6 +232,30 @@ function encodeBitsToZeroWidth(bits: string): string {
     .join('')
 }
 
+// 新增：将位串按 2 位编码为 base4 零宽字符
+function encodeBitsToZeroWidthBase4(bits: string): string {
+  let out = ''
+  for (let i = 0; i < bits.length; i += 2) {
+    const pair = bits.slice(i, i + 2)
+    const idx = parseInt(pair.padEnd(2, '0'), 2)
+    const key = String(idx) as keyof typeof BASE4_ZERO_WIDTH_CHARS
+    out += BASE4_ZERO_WIDTH_CHARS[key] || ''
+  }
+  return out
+}
+
+// 新增：将位串按 3 位编码为 base8 零宽字符（为保证还原字节数，配合长度前缀使用）
+function encodeBitsToZeroWidthBase8(bits: string): string {
+  let out = ''
+  for (let i = 0; i < bits.length; i += 3) {
+    const triplet = bits.slice(i, i + 3)
+    const idx = parseInt(triplet.padEnd(3, '0'), 2)
+    const key = String(idx) as keyof typeof BASE8_ZERO_WIDTH_CHARS
+    out += BASE8_ZERO_WIDTH_CHARS[key] || ''
+  }
+  return out
+}
+
 /**
  * 将零宽度字符解码为十六进制字符串
  */
@@ -224,12 +268,47 @@ function decodeFromZeroWidth(zeroWidthText: string): string {
 // 新增：从零宽字符解码为二进制位串
 const BINARY_CHAR_TO_BIT: Record<string, string> = {
   ['\u200B']: '0',
-  ['\u200C']: '1',
+  ['\u2060']: '1',
 }
 
+// base4 反向映射
+const BASE4_CHAR_TO_BITS: Record<string, string> = {
+  ['\u200B']: '00',
+  ['\u2060']: '01',
+  ['\u2062']: '10',
+  ['\u2063']: '11',
+}
+
+// base8 反向映射
+const BASE8_CHAR_TO_BITS: Record<string, string> = {
+  ['\u200B']: '000',
+  ['\u2060']: '001',
+  ['\u2061']: '010',
+  ['\u2062']: '011',
+  ['\u2063']: '100',
+  ['\u2064']: '101',
+  ['\uFEFF']: '110',
+  ['\u200E']: '111',
+}
+
+// 修复：还原二进制解码函数
 function decodeZeroWidthToBits(zeroWidthText: string): string {
   return Array.from(zeroWidthText)
     .map(char => BINARY_CHAR_TO_BIT[char] || '')
+    .join('')
+}
+
+// 修复：base4 解码函数映射到 BASE4_CHAR_TO_BITS
+function decodeZeroWidthBase4ToBits(zeroWidthText: string): string {
+  return Array.from(zeroWidthText)
+    .map(char => BASE4_CHAR_TO_BITS[char] || '')
+    .join('')
+}
+
+// 保持：base8 解码函数
+function decodeZeroWidthBase8ToBits(zeroWidthText: string): string {
+  return Array.from(zeroWidthText)
+    .map(char => BASE8_CHAR_TO_BITS[char] || '')
     .join('')
 }
 
@@ -310,6 +389,8 @@ function extractZeroWidthChars(text: string): string {
   const zeroWidthChars = [
     ...Object.values(ZERO_WIDTH_CHARS),
     ...Object.values(BINARY_ZERO_WIDTH_CHARS),
+    ...Object.values(BASE4_ZERO_WIDTH_CHARS),
+    ...Object.values(BASE8_ZERO_WIDTH_CHARS),
   ]
   return Array.from(text)
     .filter(char => (zeroWidthChars as readonly string[]).includes(char))
@@ -322,12 +403,8 @@ function extractZeroWidthChars(text: string): string {
 export class TextBlindWatermark {
   private password: Uint8Array
   private seed?: number
-  private encoding: 'hex' | 'binary'
+  private encoding: 'hex' | 'binary' | 'base4' | 'base8'
 
-  /**
-   * 初始化 TextBlindWatermark 实例
-   * @param options 配置选项
-   */
   constructor(options: WatermarkOptions = {}) {
     // 处理密码 - 支持字符串和 Uint8Array，与 Python 版本一样
     if (options.password instanceof Uint8Array) {
@@ -342,28 +419,37 @@ export class TextBlindWatermark {
     this.encoding = options.encoding ?? 'hex'
   }
 
-  /**
-   * 随机添加水印到文本中（等同于 Python 的 add_wm_rnd）
-   * @param text 原始文本
-   * @param watermark 水印内容（字符串或 Uint8Array）
-   * @returns 嵌入水印的文本
-   */
+  // 数值转固定长度二进制串（用于 base8 长度前缀）
+  private numberToFixedBits(n: number, bitLength: number): string {
+    let s = Math.max(0, n >>> 0).toString(2) // 32bit 无符号
+    if (s.length > bitLength) s = s.slice(-bitLength)
+    return s.padStart(bitLength, '0')
+  }
+
   addWatermarkRandom(text: string, watermark: string | Uint8Array): string {
     try {
-      // 如果水印是字符串，则转换为字节
       const watermarkBytes = typeof watermark === 'string' ? stringToBytes(watermark) : watermark
-
-      // 加密水印
       const encryptedWatermark = xorCrypt(watermarkBytes, this.password)
 
       if (this.encoding === 'binary') {
-        // 移动端安全：二进制编码
         const bitString = bytesToBitString(encryptedWatermark)
         const zeroWidthWatermark = encodeBitsToZeroWidth(bitString)
         return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
       }
 
-      // 默认十六进制编码
+      if (this.encoding === 'base4') {
+        const bitString = bytesToBitString(encryptedWatermark)
+        const zeroWidthWatermark = encodeBitsToZeroWidthBase4(bitString)
+        return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
+      }
+
+      if (this.encoding === 'base8') {
+        const bitString = bytesToBitString(encryptedWatermark)
+        const header = this.numberToFixedBits(encryptedWatermark.length, 32) // 32bit 长度前缀（字节）
+        const zeroWidthWatermark = encodeBitsToZeroWidthBase8(header + bitString)
+        return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
+      }
+
       const hexWatermark = bytesToHex(encryptedWatermark)
       const zeroWidthWatermark = encodeToZeroWidth(hexWatermark)
       return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
@@ -372,23 +458,9 @@ export class TextBlindWatermark {
     }
   }
 
-  /**
-   * addWatermarkRandom 的别名，以匹配 Python API
-   */
-  add_wm_rnd(text: string, wm: string | Uint8Array): string {
-    return this.addWatermarkRandom(text, wm)
-  }
-
-  /**
-   * 从文本中提取水印（等同于 Python 的 extract）
-   * @param textWithWatermark 包含水印的文本
-   * @returns 提取的水印作为 Uint8Array
-   */
   extract(textWithWatermark: string): Uint8Array {
     try {
-      // 提取零宽度字符
       const zeroWidthChars = extractZeroWidthChars(textWithWatermark)
-
       if (!zeroWidthChars) {
         throw new Error('未找到水印')
       }
@@ -403,40 +475,55 @@ export class TextBlindWatermark {
         return watermark
       }
 
-      // 解码为十六进制
-      const hexWatermark = decodeFromZeroWidth(zeroWidthChars)
+      if (this.encoding === 'base4') {
+        const bits = decodeZeroWidthBase4ToBits(zeroWidthChars)
+        if (!bits || bits.length % 8 !== 0) {
+          throw new Error('无效的水印格式')
+        }
+        const encryptedWatermark = bitStringToBytes(bits)
+        const watermark = xorCrypt(encryptedWatermark, this.password)
+        return watermark
+      }
 
+      if (this.encoding === 'base8') {
+        const bits = decodeZeroWidthBase8ToBits(zeroWidthChars)
+        if (!bits || bits.length < 32) {
+          throw new Error('无效的水印格式')
+        }
+        const lenBytes = parseInt(bits.slice(0, 32), 2) >>> 0
+        const payloadBits = bits.slice(32, 32 + lenBytes * 8)
+        if (payloadBits.length !== lenBytes * 8) {
+          throw new Error('无效的水印长度')
+        }
+        const encryptedWatermark = bitStringToBytes(payloadBits)
+        const watermark = xorCrypt(encryptedWatermark, this.password)
+        return watermark
+      }
+
+      const hexWatermark = decodeFromZeroWidth(zeroWidthChars)
       if (!hexWatermark || hexWatermark.length % 2 !== 0) {
         throw new Error('无效的水印格式')
       }
-
-      // 转换为字节
       const encryptedWatermark = hexToBytes(hexWatermark)
-
-      // 解密水印
       const watermark = xorCrypt(encryptedWatermark, this.password)
-
       return watermark
     } catch (error) {
       throw new Error(`提取水印失败: ${error}`)
     }
   }
 
-  /**
-   * 提取水印并返回为字符串
-   * @param textWithWatermark 包含水印的文本
-   * @returns 提取的水印作为字符串
-   */
+  // 兼容 Python 风格 API
+  add_wm_rnd(text: string, wm: string | Uint8Array): string {
+    return this.addWatermarkRandom(text, wm)
+  }
+
+  // 提取为字符串
   extractAsString(textWithWatermark: string): string {
     const watermarkBytes = this.extract(textWithWatermark)
     return bytesToString(watermarkBytes)
   }
 
-  /**
-   * 检查文本是否包含水印
-   * @param text 要检查的文本
-   * @returns 如果检测到水印则返回 true
-   */
+  // 检测是否包含水印
   hasWatermark(text: string): boolean {
     try {
       const zeroWidthChars = extractZeroWidthChars(text)
@@ -446,15 +533,12 @@ export class TextBlindWatermark {
     }
   }
 
-  /**
-   * 从文本中移除水印
-   * @param textWithWatermark 包含水印的文本
-   * @returns 不含水印的干净文本
-   */
   removeWatermark(textWithWatermark: string): string {
     const zeroWidthChars = [
       ...Object.values(ZERO_WIDTH_CHARS),
       ...Object.values(BINARY_ZERO_WIDTH_CHARS),
+      ...Object.values(BASE4_ZERO_WIDTH_CHARS),
+      ...Object.values(BASE8_ZERO_WIDTH_CHARS),
     ]
     return Array.from(textWithWatermark)
       .filter(char => !(zeroWidthChars as readonly string[]).includes(char))
@@ -462,7 +546,6 @@ export class TextBlindWatermark {
   }
 }
 
-// 导出工具函数供高级用法使用
 export {
   stringToBytes,
   bytesToString,
@@ -472,6 +555,8 @@ export {
   decodeFromZeroWidth,
   ZERO_WIDTH_CHARS,
   BINARY_ZERO_WIDTH_CHARS,
+  BASE4_ZERO_WIDTH_CHARS,
+  BASE8_ZERO_WIDTH_CHARS,
 }
 
 // 默认导出
