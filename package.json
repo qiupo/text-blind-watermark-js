@@ -21,7 +21,7 @@
     "lint:fix": "eslint src --ext .ts,.js --fix",
     "format": "prettier --write src/**/*.ts tests/**/*.ts",
     "format:check": "prettier --check src/**/*.ts tests/**/*.ts",
-    "prepublishOnly": "npm run lint && npm test && npm run build",
+    "prepublishOnly": "yarn lint && yarn test && yarn build",
     "docs": "typedoc src/index.ts"
   },
   "keywords": [
