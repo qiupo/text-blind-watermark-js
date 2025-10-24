@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本盲水印 JS - 浏览器示例</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .error {
+            background: #ffe8e8;
+            border: 1px solid #f44336;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .info {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔒 文本盲水印 JS - 浏览器演示</h1>
+    
+    <div class="info">
+        <strong>工作原理：</strong> 该库使用零宽度 Unicode 字符在文本中嵌入不可见的水印。
+        加水印的文本看起来与原文完全相同，但包含可以用正确密码提取的隐藏信息。
+    </div>
+
+    <div class="container">
+        <h2>🔐 配置</h2>
+        <label for="password">密码：</label>
+        <input type="password" id="password" placeholder="输入您的秘密密码" value="demo-password">
+        
+        <label for="seed">随机种子（可选）：</label>
+        <input type="text" id="seed" placeholder="留空表示随机放置">
+    </div>
+
+    <div class="container">
+        <h2>📝 添加水印</h2>
+        <label for="originalText">原始文本：</label>
+        <textarea id="originalText" placeholder="输入您要添加水印的文本...">这是一个将被添加水印的示例文本。水印对人眼来说是完全不可见的，但可以通过正确的密码以编程方式提取。您可以将此文本复制粘贴到任何地方，水印都会保持完整！</textarea>
+        
+        <label for="secretMessage">秘密消息：</label>
+        <input type="text" id="secretMessage" placeholder="输入您的秘密消息..." value="这是一个隐藏的水印！">
+        
+        <button onclick="addWatermark()">🔒 添加水印</button>
+        
+        <div id="watermarkResult" class="hidden">
+            <h3>加水印的文本：</h3>
+            <textarea id="watermarkedText" readonly></textarea>
+            <div class="info">
+                <strong>成功！</strong> 上面的文本包含您的隐藏水印。
+                复制它并在下面尝试提取水印。
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🔍 提取水印</h2>
+        <label for="textToExtract">带水印的文本：</label>
+        <textarea id="textToExtract" placeholder="在此粘贴带水印的文本..."></textarea>
+        
+        <button onclick="extractWatermark()">🔓 提取水印</button>
+        <button onclick="checkWatermark()">🔍 检查是否有水印</button>
+        <button onclick="removeWatermark()">🧹 移除水印</button>
+        
+        <div id="extractResult" class="hidden"></div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 测试用例</h2>
+        <button onclick="testUnicode()">测试 Unicode 支持</button>
+        <button onclick="testSecurity()">测试安全性</button>
+        <button onclick="testEdgeCases()">测试边界情况</button>
+        
+        <div id="testResults"></div>
+    </div>
+
+    <!-- Load the library from CDN or local build -->
+    <script src="../dist/index.umd.js"></script>
+    
+    <script>
+        // 全局水印实例
+        let watermark = null;
+
+        function updateWatermark() {
+            const password = document.getElementById('password').value || 'default_password';
+            const seedInput = document.getElementById('seed').value;
+            const seed = seedInput ? parseInt(seedInput) : undefined;
+            
+            watermark = new TextBlindWatermark.TextBlindWatermark({ password, seed });
+        }
+
+        function addWatermark() {
+            updateWatermark();
+            
+            const originalText = document.getElementById('originalText').value;
+            const secretMessage = document.getElementById('secretMessage').value;
+            
+            if (!originalText || !secretMessage) {
+                showError('请输入原始文本和秘密消息。');
+                return;
+            }
+            
+            try {
+                const watermarkedText = watermark.addWatermarkRandom(originalText, secretMessage);
+                
+                document.getElementById('watermarkedText').value = watermarkedText;
+                document.getElementById('watermarkResult').classList.remove('hidden');
+                
+                // 自动填充提取字段
+                document.getElementById('textToExtract').value = watermarkedText;
+                
+            } catch (error) {
+                showError('添加水印失败：' + error.message);
+            }
+        }
+
+        function extractWatermark() {
+            updateWatermark();
+            
+            const textToExtract = document.getElementById('textToExtract').value;
+            
+            if (!textToExtract) {
+                showError('请输入要提取水印的文本。');
+                return;
+            }
+            
+            try {
+                const extractedMessage = watermark.extractAsString(textToExtract);
+                showResult('提取的水印：' + extractedMessage);
+            } catch (error) {
+                showError('提取水印失败：' + error.message);
+            }
+        }
+
+        function checkWatermark() {
+            updateWatermark();
+            
+            const textToCheck = document.getElementById('textToExtract').value;
+            
+            if (!textToCheck) {
+                showError('请输入要检查的文本。');
+                return;
+            }
+            
+            try {
+                const hasWatermark = watermark.hasWatermark(textToCheck);
+                showResult('包含水印：' + (hasWatermark ? '是 ✅' : '否 ❌'));
+            } catch (error) {
+                showError('检查水印失败：' + error.message);
+            }
+        }
+
+        function removeWatermark() {
+            updateWatermark();
+            
+            const textToClean = document.getElementById('textToExtract').value;
+            
+            if (!textToClean) {
+                showError('请输入要清理的文本。');
+                return;
+            }
+            
+            try {
+                const cleanText = watermark.removeWatermark(textToClean);
+                showResult('清理后的文本：' + cleanText);
+            } catch (error) {
+                showError('移除水印失败：' + error.message);
+            }
+        }
+
+        function testUnicode() {
+            updateWatermark();
+            
+            const testCases = [
+                { text: '这是中文测试文本', secret: '中文水印' },
+                { text: 'Text with emojis 🎉🚀⭐', secret: 'Emoji test! 🔒' },
+                { text: 'العربية النص', secret: 'Arabic watermark' }
+            ];
+            
+            let results = '<h3>Unicode 测试结果：</h3>';
+            
+            testCases.forEach((testCase, index) => {
+                try {
+                    const watermarked = watermark.addWatermarkRandom(testCase.text, testCase.secret);
+                    const extracted = watermark.extractAsString(watermarked);
+                    const success = extracted === testCase.secret;
+                    
+                    results += `<div class="${success ? 'result' : 'error'}">
+                        测试 ${index + 1}: ${success ? '✅' : '❌'}<br>
+                        原文: ${testCase.text}<br>
+                        秘密: ${testCase.secret}<br>
+                        提取结果: ${extracted}
+                    </div>`;
+                } catch (error) {
+                    results += `<div class="error">测试 ${index + 1}: ❌ 错误: ${error.message}</div>`;
+                }
+            });
+            
+            document.getElementById('testResults').innerHTML = results;
+        }
+
+        function testSecurity() {
+            const correctPassword = 'correct-password';
+            const wrongPassword = 'wrong-password';
+            
+            const correctWatermark = new TextBlindWatermark.TextBlindWatermark({ password: correctPassword });
+            const wrongWatermark = new TextBlindWatermark.TextBlindWatermark({ password: wrongPassword });
+            
+            const text = '用于密码保护的安全测试文本。';
+            const secret = '秘密消息';
+            
+            let results = '<h3>安全测试结果：</h3>';
+            
+            try {
+                // 使用正确密码添加水印
+                const watermarked = correctWatermark.addWatermarkRandom(text, secret);
+                
+                // 尝试使用正确密码提取
+                const correctExtraction = correctWatermark.extractAsString(watermarked);
+                const correctSuccess = correctExtraction === secret;
+                
+                results += `<div class="${correctSuccess ? 'result' : 'error'}">
+                    正确密码: ${correctSuccess ? '✅' : '❌'}<br>
+                    提取结果: ${correctExtraction}
+                </div>`;
+                
+                // 尝试使用错误密码提取
+                try {
+                    const wrongExtraction = wrongWatermark.extractAsString(watermarked);
+                    results += `<div class="error">
+                        错误密码: ❌ 应该失败但得到了: ${wrongExtraction}
+                    </div>`;
+                } catch (error) {
+                    results += `<div class="result">
+                        错误密码: ✅ 正确失败，错误信息: ${error.message}
+                    </div>`;
+                }
+                
+            } catch (error) {
+                results += `<div class="error">安全测试失败: ${error.message}</div>`;
+            }
+            
+            document.getElementById('testResults').innerHTML = results;
+        }
+
+        function testEdgeCases() {
+            updateWatermark();
+            
+            const testCases = [
+                { name: '空秘密', text: '测试文本', secret: '' },
+                { name: '很短的文本', text: '你好', secret: '秘密' },
+                { name: '很长的秘密', text: '用于长秘密测试的短文本', secret: '这是一个非常长的秘密消息，可能比原始文本本身还要长！' },
+                { name: '特殊字符', text: '包含特殊字符的文本: @#$%^&*()_+-=[]{}|;:,.<>?', secret: '特殊字符测试！' }
+            ];
+            
+            let results = '<h3>边界情况测试结果：</h3>';
+            
+            testCases.forEach((testCase) => {
+                try {
+                    const watermarked = watermark.addWatermarkRandom(testCase.text, testCase.secret);
+                    const extracted = watermark.extractAsString(watermarked);
+                    const success = extracted === testCase.secret;
+                    
+                    results += `<div class="${success ? 'result' : 'error'}">
+                        ${testCase.name}: ${success ? '✅' : '❌'}<br>
+                        文本长度: ${testCase.text.length}, 秘密长度: ${testCase.secret.length}<br>
+                        ${success ? '成功' : `期望: "${testCase.secret}", 得到: "${extracted}"`}
+                    </div>`;
+                } catch (error) {
+                    results += `<div class="error">${testCase.name}: ❌ 错误: ${error.message}</div>`;
+                }
+            });
+            
+            document.getElementById('testResults').innerHTML = results;
+        }
+
+        function showResult(message) {
+            document.getElementById('extractResult').innerHTML = `<div class="result">${message}</div>`;
+            document.getElementById('extractResult').classList.remove('hidden');
+        }
+
+        function showError(message) {
+            document.getElementById('extractResult').innerHTML = `<div class="error">${message}</div>`;
+            document.getElementById('extractResult').classList.remove('hidden');
+        }
+
+        // 使用默认水印初始化
+        updateWatermark();
+    </script>
+</body>
+</html>
