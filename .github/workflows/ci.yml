@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -46,7 +47,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
     - uses: actions/checkout@v3
@@ -63,6 +64,16 @@ jobs:
     
     - name: Build
       run: yarn build
+
+    - name: Set package version from tag
+      shell: bash
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "Tag version: $VERSION"
+    
+    - name: Update package.json version
+      run: yarn version --new-version ${{ env.VERSION }} --no-git-tag-version
     
     - name: Publish to npm
       run: yarn publish --access public --non-interactive
