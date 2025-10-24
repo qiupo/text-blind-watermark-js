@@ -28,6 +28,12 @@ const ZERO_WIDTH_CHARS = {
   F: '\u202A', // 从左到右嵌入
 } as const
 
+// 新增：移动端安全的二进制字符集，仅使用两个兼容性最好的零宽字符
+const BINARY_ZERO_WIDTH_CHARS = {
+  '0': '\u200B', // 0 -> ZWSP
+  '1': '\u200C', // 1 -> ZWNJ
+} as const
+
 // 用于解码的反向映射
 const CHAR_TO_HEX: Record<string, string> = {}
 Object.entries(ZERO_WIDTH_CHARS).forEach(([hex, char]) => {
@@ -42,6 +48,8 @@ export interface WatermarkOptions {
   password?: string | Uint8Array
   /** 用于可重现水印放置的随机种子 */
   seed?: number
+  /** 编码方案：默认 'hex'，移动端安全可用 'binary' */
+  encoding?: 'hex' | 'binary'
 }
 
 /**
@@ -59,14 +67,99 @@ function xorCrypt(data: Uint8Array, key: Uint8Array): Uint8Array {
  * 将字符串转换为 UTF-8 字节
  */
 function stringToBytes(str: string): Uint8Array {
-  return new TextEncoder().encode(str)
+  // 优先使用原生 TextEncoder；小程序等环境没有时，使用纯 JS UTF-8 编码
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(str)
+  }
+  return utf8Encode(str)
+}
+
+// 纯 JS UTF-8 编码（兼容高码点）
+function utf8Encode(str: string): Uint8Array {
+  const bytes: number[] = []
+  for (let i = 0; i < str.length; i++) {
+    let code = str.charCodeAt(i)
+    // 处理代理对 -> 生成 Unicode 码点
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      const next = str.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        code = ((code - 0xd800) << 10) + (next - 0xdc00) + 0x10000
+        i++
+      }
+    }
+    if (code <= 0x7f) {
+      bytes.push(code)
+    } else if (code <= 0x7ff) {
+      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f))
+    } else if (code <= 0xffff) {
+      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+    } else {
+      bytes.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 0x3f),
+        0x80 | ((code >> 6) & 0x3f),
+        0x80 | (code & 0x3f)
+      )
+    }
+  }
+  return new Uint8Array(bytes)
 }
 
 /**
  * 将 UTF-8 字节转换为字符串
  */
 function bytesToString(bytes: Uint8Array): string {
-  return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+  // 优先使用原生 TextDecoder；没有时用纯 JS UTF-8 解码
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+  }
+  return utf8Decode(bytes)
+}
+
+// 纯 JS UTF-8 解码
+function utf8Decode(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; ) {
+    const b1 = bytes[i++]
+    if (b1 < 0x80) {
+      out += String.fromCharCode(b1)
+      continue
+    }
+    if ((b1 & 0xe0) === 0xc0) {
+      // 2 字节
+      const b2 = bytes[i++] & 0x3f
+      const cp = ((b1 & 0x1f) << 6) | b2
+      out += String.fromCharCode(cp)
+      continue
+    }
+    if ((b1 & 0xf0) === 0xe0) {
+      // 3 字节
+      const b2 = bytes[i++] & 0x3f
+      const b3 = bytes[i++] & 0x3f
+      const cp = ((b1 & 0x0f) << 12) | (b2 << 6) | b3
+      out += String.fromCharCode(cp)
+      continue
+    }
+    if ((b1 & 0xf8) === 0xf0) {
+      // 4 字节
+      const b2 = bytes[i++] & 0x3f
+      const b3 = bytes[i++] & 0x3f
+      const b4 = bytes[i++] & 0x3f
+      const cp = ((b1 & 0x07) << 18) | (b2 << 12) | (b3 << 6) | b4
+      if (cp <= 0xffff) {
+        out += String.fromCharCode(cp)
+      } else {
+        const adjusted = cp - 0x10000
+        const high = 0xd800 + (adjusted >> 10)
+        const low = 0xdc00 + (adjusted & 0x3ff)
+        out += String.fromCharCode(high, low)
+      }
+      continue
+    }
+    // 非法首字节，按替换字符处理
+    out += '\uFFFD'
+  }
+  return out
 }
 
 /**
@@ -105,6 +198,20 @@ function encodeToZeroWidth(hex: string): string {
     .join('')
 }
 
+// 新增：二进制到零宽字符的编码
+function bytesToBitString(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map(b => b.toString(2).padStart(8, '0'))
+    .join('')
+}
+
+function encodeBitsToZeroWidth(bits: string): string {
+  return bits
+    .split('')
+    .map(bit => BINARY_ZERO_WIDTH_CHARS[bit as keyof typeof BINARY_ZERO_WIDTH_CHARS] || '')
+    .join('')
+}
+
 /**
  * 将零宽度字符解码为十六进制字符串
  */
@@ -112,6 +219,28 @@ function decodeFromZeroWidth(zeroWidthText: string): string {
   return Array.from(zeroWidthText)
     .map(char => CHAR_TO_HEX[char] || '')
     .join('')
+}
+
+// 新增：从零宽字符解码为二进制位串
+const BINARY_CHAR_TO_BIT: Record<string, string> = {
+  ['\u200B']: '0',
+  ['\u200C']: '1',
+}
+
+function decodeZeroWidthToBits(zeroWidthText: string): string {
+  return Array.from(zeroWidthText)
+    .map(char => BINARY_CHAR_TO_BIT[char] || '')
+    .join('')
+}
+
+function bitStringToBytes(bits: string): Uint8Array {
+  const len = Math.floor(bits.length / 8)
+  const out = new Uint8Array(len)
+  for (let i = 0; i < len; i++) {
+    const byteBits = bits.slice(i * 8, i * 8 + 8)
+    out[i] = parseInt(byteBits, 2)
+  }
+  return out
 }
 
 /**
@@ -178,7 +307,10 @@ function insertWatermarkRandomly(
  * 从文本中提取零宽度字符
  */
 function extractZeroWidthChars(text: string): string {
-  const zeroWidthChars = Object.values(ZERO_WIDTH_CHARS)
+  const zeroWidthChars = [
+    ...Object.values(ZERO_WIDTH_CHARS),
+    ...Object.values(BINARY_ZERO_WIDTH_CHARS),
+  ]
   return Array.from(text)
     .filter(char => (zeroWidthChars as readonly string[]).includes(char))
     .join('')
@@ -190,6 +322,7 @@ function extractZeroWidthChars(text: string): string {
 export class TextBlindWatermark {
   private password: Uint8Array
   private seed?: number
+  private encoding: 'hex' | 'binary'
 
   /**
    * 初始化 TextBlindWatermark 实例
@@ -206,6 +339,7 @@ export class TextBlindWatermark {
     }
 
     this.seed = options.seed
+    this.encoding = options.encoding ?? 'hex'
   }
 
   /**
@@ -222,13 +356,16 @@ export class TextBlindWatermark {
       // 加密水印
       const encryptedWatermark = xorCrypt(watermarkBytes, this.password)
 
-      // 转换为十六进制
+      if (this.encoding === 'binary') {
+        // 移动端安全：二进制编码
+        const bitString = bytesToBitString(encryptedWatermark)
+        const zeroWidthWatermark = encodeBitsToZeroWidth(bitString)
+        return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
+      }
+
+      // 默认十六进制编码
       const hexWatermark = bytesToHex(encryptedWatermark)
-
-      // 编码为零宽度字符
       const zeroWidthWatermark = encodeToZeroWidth(hexWatermark)
-
-      // 随机插入到文本中
       return insertWatermarkRandomly(text, zeroWidthWatermark, this.seed)
     } catch (error) {
       throw new Error(`添加水印失败: ${error}`)
@@ -254,6 +391,16 @@ export class TextBlindWatermark {
 
       if (!zeroWidthChars) {
         throw new Error('未找到水印')
+      }
+
+      if (this.encoding === 'binary') {
+        const bits = decodeZeroWidthToBits(zeroWidthChars)
+        if (!bits || bits.length % 8 !== 0) {
+          throw new Error('无效的水印格式')
+        }
+        const encryptedWatermark = bitStringToBytes(bits)
+        const watermark = xorCrypt(encryptedWatermark, this.password)
+        return watermark
       }
 
       // 解码为十六进制
@@ -305,7 +452,10 @@ export class TextBlindWatermark {
    * @returns 不含水印的干净文本
    */
   removeWatermark(textWithWatermark: string): string {
-    const zeroWidthChars = Object.values(ZERO_WIDTH_CHARS)
+    const zeroWidthChars = [
+      ...Object.values(ZERO_WIDTH_CHARS),
+      ...Object.values(BINARY_ZERO_WIDTH_CHARS),
+    ]
     return Array.from(textWithWatermark)
       .filter(char => !(zeroWidthChars as readonly string[]).includes(char))
       .join('')
@@ -321,6 +471,7 @@ export {
   encodeToZeroWidth,
   decodeFromZeroWidth,
   ZERO_WIDTH_CHARS,
+  BINARY_ZERO_WIDTH_CHARS,
 }
 
 // 默认导出

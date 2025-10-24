@@ -83,6 +83,7 @@ new TextBlindWatermark(options?: WatermarkOptions)
 **参数：**
 - `options.password` (可选): 加密密码，支持字符串或 Uint8Array
 - `options.seed` (可选): 随机种子，用于可重现的水印位置
+- `options.encoding` (可选): `'hex' | 'binary'`，编码方案。若在手机端看到小圆圈/点，请使用 `'binary'`
 
 ### 主要方法
 
@@ -267,3 +268,17 @@ npm run lint
 ---
 
 如果这个项目对您有帮助，请给它一个 ⭐️！
+
+## 📱 移动端兼容提示
+
+部分手机应用/字体会把某些零宽或组合标记渲染为可见的点圈（如截图中出现的小圆圈）。如果遇到这种情况，请切换到移动端安全的二进制编码：
+
+```javascript
+import TextBlindWatermark from 'text-blind-watermark-js'
+
+const wm = new TextBlindWatermark({ password: 'secret', encoding: 'binary' })
+const withWm = wm.addWatermarkRandom('你好', '隐藏水印')
+console.log(wm.extractAsString(withWm))
+```
+
+二进制模式仅使用 `U+200B`（ZWSP）和 `U+200C`（ZWNJ）两个零宽字符，在主流手机端兼容性更好、不会显示点圈。

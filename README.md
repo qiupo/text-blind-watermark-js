@@ -90,6 +90,7 @@ new TextBlindWatermark(options?: WatermarkOptions)
 **Options:**
 - `password?: string | Uint8Array` - Password for encryption (default: 'default_password')
 - `seed?: number` - Random seed for reproducible watermark placement
+- `encoding?: 'hex' | 'binary'` - Encoding scheme. Use `'binary'` for mobile-safe zero-width characters
 
 ### Methods
 
@@ -232,3 +233,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [GitHub repository](https://github.com/yourusername/text-blind-watermark-js)
 - [Documentation](https://github.com/yourusername/text-blind-watermark-js#readme)
 - [Issues](https://github.com/yourusername/text-blind-watermark-js/issues)
+
+
+## 📱 Mobile Compatibility
+
+Some mobile apps and fonts render certain zero-width or combining marks as visible dotted circles. If you see circles or dots in messages, switch to the mobile-safe encoding:
+
+```javascript
+import { TextBlindWatermark } from 'text-blind-watermark-js'
+
+const wm = new TextBlindWatermark({ password: 'secret', encoding: 'binary' })
+const withWm = wm.addWatermarkRandom('Hello', 'Hidden')
+const extracted = wm.extractAsString(withWm)
+```
+
+The binary mode uses only `U+200B` (ZWSP) and `U+200C` (ZWNJ), which are the most robust invisible characters across mobile platforms.
