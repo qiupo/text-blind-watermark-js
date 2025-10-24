@@ -11,6 +11,7 @@ A JavaScript/TypeScript implementation of text blind watermarking, inspired by t
 ## ✨ Features
 
 - 🔒 **Invisible Watermarks**: Embed completely invisible watermarks using zero-width Unicode characters
+- 🖼️ **Image Steganography**: Hide text/data in images using LSB (Least Significant Bit) technique
 - 🛡️ **Password Protection**: Secure your watermarks with password-based encryption
 - 🌐 **Cross-Platform**: Works in browsers, Node.js, and various platforms (WeChat, DingTalk, etc.)
 - 📱 **Unicode Support**: Full support for international text and emojis
@@ -32,7 +33,7 @@ yarn add text-blind-watermark-js
 
 ## 📖 Quick Start
 
-### Basic Usage
+### Text Watermarking
 
 ```javascript
 import { TextBlindWatermark } from 'text-blind-watermark-js'
@@ -52,6 +53,34 @@ console.log('Text with watermark:', textWithWatermark)
 const extractedMessage = watermark.extractAsString(textWithWatermark)
 console.log('Extracted watermark:', extractedMessage)
 // Output: "Hidden watermark"
+```
+
+### Image Steganography
+
+```javascript
+import { ImageSteganography, CanvasImageProcessor } from 'text-blind-watermark-js'
+
+// Create steganography instance
+const steganography = new ImageSteganography({ 
+  password: 'image-secret',
+  checksum: true 
+})
+
+// Browser usage with Canvas
+const processor = new CanvasImageProcessor()
+
+// Hide text in image
+const imageFile = document.getElementById('imageInput').files[0]
+const imageData = await processor.loadImageFromFile(imageFile)
+const hiddenImageData = steganography.hideData(imageData, 'Secret message')
+
+// Download the image with hidden data
+processor.downloadImage(hiddenImageData, 'hidden-message.png')
+
+// Extract hidden text from image
+const extractedMessage = steganography.extractData(hiddenImageData)
+console.log('Hidden message:', extractedMessage)
+// Output: "Secret message"
 ```
 
 ### Python-Style API
@@ -81,7 +110,9 @@ const extractedBytes = watermark.extract(textWithWatermark)
 
 ## 🔧 API Reference
 
-### Constructor
+### Text Watermarking
+
+#### Constructor
 
 ```typescript
 new TextBlindWatermark(options?: WatermarkOptions)
@@ -91,35 +122,83 @@ new TextBlindWatermark(options?: WatermarkOptions)
 - `password?: string | Uint8Array` - Password for encryption (default: 'default_password')
 - `seed?: number` - Random seed for reproducible watermark placement
 
-### Methods
+#### Methods
 
-#### `addWatermarkRandom(text: string, watermark: string | Uint8Array): string`
+##### `addWatermarkRandom(text: string, watermark: string | Uint8Array): string`
 
 Embeds a watermark into the text at random positions.
 
-#### `add_wm_rnd(text: string, wm: string | Uint8Array): string`
+##### `add_wm_rnd(text: string, wm: string | Uint8Array): string`
 
 Python-compatible alias for `addWatermarkRandom`.
 
-#### `extract(textWithWatermark: string): Uint8Array`
+##### `extract(textWithWatermark: string): Uint8Array`
 
 Extracts the watermark as raw bytes.
 
-#### `extractAsString(textWithWatermark: string): string`
+##### `extractAsString(textWithWatermark: string): string`
 
 Extracts the watermark as a UTF-8 string.
 
-#### `hasWatermark(text: string): boolean`
+##### `hasWatermark(text: string): boolean`
 
 Checks if the text contains a watermark.
 
-#### `removeWatermark(textWithWatermark: string): string`
+##### `removeWatermark(textWithWatermark: string): string`
 
 Removes the watermark from the text, returning clean text.
 
+### Image Steganography
+
+#### Constructor
+
+```typescript
+new ImageSteganography(options?: SteganographyOptions)
+```
+
+**Options:**
+- `password?: string` - Password for encryption (optional)
+- `checksum?: boolean` - Enable data integrity checking (default: true)
+
+#### Methods
+
+##### `hideData(imageData: StegoImageData, message: string): StegoImageData`
+
+Hides a text message in the image using LSB steganography.
+
+##### `extractData(imageData: StegoImageData): string`
+
+Extracts hidden text from the image.
+
+##### `hasHiddenData(imageData: StegoImageData): boolean`
+
+Checks if the image contains hidden data.
+
+##### `getMaxCapacity(imageData: StegoImageData): number`
+
+Returns the maximum number of characters that can be hidden in the image.
+
+#### Canvas Image Processor
+
+```typescript
+new CanvasImageProcessor()
+```
+
+##### `loadImageFromFile(file: File): Promise<StegoImageData>`
+
+Loads an image file and returns image data for steganography.
+
+##### `imageDataToBlob(imageData: StegoImageData, format?: string): Promise<Blob>`
+
+Converts image data to a downloadable blob.
+
+##### `downloadImage(imageData: StegoImageData, filename: string): void`
+
+Downloads the image with hidden data.
+
 ## 🛠️ Advanced Usage
 
-### Working with Binary Data
+### Text Watermarking with Binary Data
 
 ```javascript
 import { TextBlindWatermark, stringToBytes, bytesToString } from 'text-blind-watermark-js'
@@ -133,6 +212,64 @@ const textWithWatermark = watermark.addWatermarkRandom(originalText, binaryData)
 // Extract binary data
 const extractedBytes = watermark.extract(textWithWatermark)
 const extractedString = bytesToString(extractedBytes)
+```
+
+### Image Steganography with Encryption
+
+```javascript
+import { ImageSteganography } from 'text-blind-watermark-js'
+
+// Create encrypted steganography instance
+const steganography = new ImageSteganography({
+  password: 'strong-encryption-key',
+  checksum: true
+})
+
+// Hide sensitive data
+const sensitiveData = 'Confidential information'
+const hiddenImageData = steganography.hideData(imageData, sensitiveData)
+
+// Only those with the correct password can extract the data
+const extractedData = steganography.extractData(hiddenImageData)
+```
+
+### Node.js Image Processing
+
+```javascript
+// For Node.js environments, you can use the provided Node.js example
+import { ImageSteganography } from 'text-blind-watermark-js'
+import { NodeImageProcessor } from './examples/image-steganography-node.js'
+
+const processor = new NodeImageProcessor()
+const steganography = new ImageSteganography({ password: 'node-secret' })
+
+// Load image from file system
+const imageData = await processor.loadImageFromFile('input.png')
+
+// Hide message
+const hiddenImageData = steganography.hideData(imageData, 'Hidden in Node.js')
+
+// Save to file system
+await processor.saveImageToFile(hiddenImageData, 'output.png')
+```
+
+### Capacity Management
+
+```javascript
+import { ImageSteganography } from 'text-blind-watermark-js'
+
+const steganography = new ImageSteganography()
+
+// Check image capacity before hiding data
+const maxCapacity = steganography.getMaxCapacity(imageData)
+console.log(`Image can hide up to ${maxCapacity} characters`)
+
+const message = 'Your message here'
+if (message.length <= maxCapacity) {
+  const hiddenImageData = steganography.hideData(imageData, message)
+} else {
+  console.error('Message too long for this image')
+}
 ```
 
 ### Reproducible Watermarks
@@ -169,6 +306,9 @@ try {
 2. **Password Storage**: Never hardcode passwords in client-side code
 3. **Watermark Size**: Longer watermarks require longer original text
 4. **Platform Testing**: Test on target platforms (WeChat, email clients, etc.)
+5. **Image Quality**: LSB steganography may be detectable with statistical analysis
+6. **Data Integrity**: Always enable checksum for critical hidden data
+7. **Encryption**: Use password protection for sensitive information
 
 ## 🧪 Testing
 
@@ -179,6 +319,10 @@ The library includes comprehensive tests covering:
 - Password-based security
 - Error handling
 - Python library compatibility
+- Image steganography functionality
+- LSB encoding/decoding accuracy
+- Data integrity verification
+- Encryption and decryption
 
 ```bash
 npm test
