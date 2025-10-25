@@ -10,28 +10,28 @@
 
 // 用于隐写术的零宽度字符映射
 const ZERO_WIDTH_CHARS = {
-  '0': '\u200B', // 零宽度空格 (ZWSP)
-  '1': '\u2060', // Word Joiner（移动端更安全）
+  '0': '\u200B', // ZWSP
+  '1': '\u2060', // Word Joiner
   '2': '\u2061', // Function Application
   '3': '\u2062', // Invisible Times
   '4': '\u2063', // Invisible Separator
   '5': '\u2064', // Invisible Plus
-  '6': '\uFEFF', // 零宽度不换行空格 (ZWNBSP)
-  '7': '\u206A', // Inhibit Symmetric Swapping
-  '8': '\u206B', // Activate Symmetric Swapping
-  '9': '\u206C', // Inhibit Arabic Form Shaping
-  A: '\u206D', // Activate Arabic Form Shaping
-  B: '\u206E', // National Digit Shapes
-  C: '\u206F', // Nominal Digit Shapes
-  D: '\u200E', // 从左到右标记 (LRM)
-  E: '\u200F', // 从右到左标记 (RLM)
-  F: '\u061C', // 阿拉伯字母标记 (ALM)
+  '6': '\uFEFF', // Zero Width No-Break Space (ZWNBSP)
+  '7': '\u200C', // Zero Width Non-Joiner (ZWNJ)
+  '8': '\u200D', // Zero Width Joiner (ZWJ)
+  '9': '\u180B', // Mongolian Variation Selector-1
+  A: '\u180C', // Mongolian Variation Selector-2
+  B: '\u180D', // Mongolian Variation Selector-3
+  C: '\uFE00', // Variation Selector-1
+  D: '\uFE01', // Variation Selector-2
+  E: '\uFE02', // Variation Selector-3
+  F: '\uFE03', // Variation Selector-4
 } as const
 
 // 新增：移动端安全的二进制字符集，仅使用两个兼容性最好的零宽字符
 const BINARY_ZERO_WIDTH_CHARS = {
   '0': '\u200B', // 0 -> ZWSP
-  '1': '\u2060', // 1 -> Word Joiner (移动端更安全)
+  '1': '\u200C', // 1 -> Zero Width Non-Joiner (ZWNJ)
 } as const
 
 // 新增：四进制（base4）移动端安全字符集，2bit/字符，体积比 binary 缩半
@@ -51,7 +51,7 @@ const BASE8_ZERO_WIDTH_CHARS = {
   '4': '\u2063', // 100 (Invisible Separator)
   '5': '\u2064', // 101 (Invisible Plus)
   '6': '\uFEFF', // 110 (Zero Width No-Break Space)
-  '7': '\u200E', // 111 (Left-to-Right Mark)
+  '7': '\u200C', // 111 (Zero Width Non-Joiner)
 } as const
 
 // 用于解码的反向映射
@@ -268,7 +268,7 @@ function decodeFromZeroWidth(zeroWidthText: string): string {
 // 新增：从零宽字符解码为二进制位串
 const BINARY_CHAR_TO_BIT: Record<string, string> = {
   ['\u200B']: '0',
-  ['\u2060']: '1',
+  ['\u200C']: '1',
 }
 
 // base4 反向映射
@@ -288,7 +288,7 @@ const BASE8_CHAR_TO_BITS: Record<string, string> = {
   ['\u2063']: '100',
   ['\u2064']: '101',
   ['\uFEFF']: '110',
-  ['\u200E']: '111',
+  ['\u200C']: '111',
 }
 
 // 修复：还原二进制解码函数
