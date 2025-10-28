@@ -1,6 +1,6 @@
 {
   "name": "text-blind-watermark-js",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "A JavaScript/TypeScript implementation of text blind watermarking using zero-width Unicode characters",
   "type": "module",
   "main": "dist/index.js",
