@@ -17,7 +17,7 @@ const ZERO_WIDTH_CHARS = {
   '4': '\u2063', // Invisible Separator
   '5': '\u2064', // Invisible Plus
   '6': '\uFEFF', // Zero Width No-Break Space (ZWNBSP)
-  '7': '\u200C', // Zero Width Non-Joiner (ZWNJ)
+  '7': '\uFE04', // Variation Selector-5 (避免部分环境显示圆圈)
   '8': '\u200D', // Zero Width Joiner (ZWJ)
   '9': '\u180B', // Mongolian Variation Selector-1
   A: '\u180C', // Mongolian Variation Selector-2
@@ -51,7 +51,7 @@ const BASE8_ZERO_WIDTH_CHARS = {
   '4': '\u2063', // 100 (Invisible Separator)
   '5': '\u2064', // 101 (Invisible Plus)
   '6': '\uFEFF', // 110 (Zero Width No-Break Space)
-  '7': '\u200C', // 111 (Zero Width Non-Joiner)
+  '7': '\uFE04', // 111 (Variation Selector-5)
 } as const
 
 // 用于解码的反向映射
@@ -288,7 +288,7 @@ const BASE8_CHAR_TO_BITS: Record<string, string> = {
   ['\u2063']: '100',
   ['\u2064']: '101',
   ['\uFEFF']: '110',
-  ['\u200C']: '111',
+  ['\uFE04']: '111',
 }
 
 // 修复：还原二进制解码函数
